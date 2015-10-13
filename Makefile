@@ -14,7 +14,7 @@ OBJ_DIR = build
 
 TARGET = main
 CPPFLAGS = -std=c++11
-TEST_FLAGS = -lgtest -D__TEST__ -g
+TESTFLAGS = -lgtest -D__TEST__ -g
 
 EXT = cpp
 
@@ -29,17 +29,20 @@ TEST_DEP = $(TEST_SOURCES:.$(EXT)=.d)
 
 .PHONY : all clean run test debug init
 
+NODEPS := clean
+
 all : $(TARGET)
 $(TARGET) : $(addprefix $(OBJ_DIR)/release/, $(MAIN_OBJECTS))
 	$(CXX) -o $(TARGET) $(LIB) \
 		$(addprefix $(OBJ_DIR)/release/, $(MAIN_OBJECTS))
 
-test : $(addprefix $(OBJ_DIR)/test/, $(MAIN_OBJECTS)) \
-	   $(addprefix $(OBJ_DIR)/test/, $(TEST_OBJECTS))
-	$(CXX) -o $(TARGET).test $(LIB) $(TEST_FLAGS) \
+test : $(TARGET).test
+	./$(TARGET).test
+$(TARGET).test : $(addprefix $(OBJ_DIR)/test/, $(MAIN_OBJECTS)) \
+                 $(addprefix $(OBJ_DIR)/test/, $(TEST_OBJECTS))
+	$(CXX) -o $(TARGET).test $(LIB) $(TESTFLAGS) \
 		$(addprefix $(OBJ_DIR)/test/, $(MAIN_OBJECTS)) \
 		$(addprefix $(OBJ_DIR)/test/, $(TEST_OBJECTS))
-	./$(TARGET).test
 
 debug : $(addprefix $(OBJ_DIR)/debug/, $(MAIN_OBJECTS))
 	$(CXX) -o $(TARGET) $(LIB) -g \
@@ -47,9 +50,18 @@ debug : $(addprefix $(OBJ_DIR)/debug/, $(MAIN_OBJECTS))
 
 #Make dependency file
 $(OBJ_DIR)/dep/main/%.d : $(SRC_DIR)/%.$(EXT)
-	$(CXX) -MM $< > $@
+	$(CXX) -MM \
+		-MT $(OBJ_DIR)/release/$*.o \
+		-MT $(OBJ_DIR)/debug/$*.o \
+		-MT $(OBJ_DIR)/test/$*.o \
+		-MF $@ \
+		$<
 $(OBJ_DIR)/dep/test/%.d : $(TEST_DIR)/%.$(EXT)
-	$(CXX) -MM $< > $@
+	$(CXX) -M \
+		-I$(SRC_DIR) \
+		-MT $(OBJ_DIR)/test/$*.test \
+		-MF $@ \
+		$<
 
 #Make object file
 ##Release
@@ -58,9 +70,9 @@ $(OBJ_DIR)/release/%.o : $(SRC_DIR)/%.$(EXT)
 
 ##Test
 $(OBJ_DIR)/test/%.o : $(SRC_DIR)/%.$(EXT)
-	$(CXX) -c $(CPPFLAGS) $(INCLUDE) $(TEST_FLAGS) $< -o $@ 
+	$(CXX) -c $(CPPFLAGS) $(INCLUDE) $(TESTFLAGS) $< -o $@
 $(OBJ_DIR)/test/%.test : $(TEST_DIR)/%.$(EXT)
-	$(CXX) -c $(CPPFLAGS) $(INCLUDE) -I$(SRC_DIR) $(TEST_FLAGS) $< -o $@ 
+	$(CXX) -c $(CPPFLAGS) $(INCLUDE) -I$(SRC_DIR) $(TESTFLAGS) $< -o $@
 
 ##Dedug
 $(OBJ_DIR)/debug/%.o : $(SRC_DIR)/%.$(EXT)
@@ -68,7 +80,7 @@ $(OBJ_DIR)/debug/%.o : $(SRC_DIR)/%.$(EXT)
 
 clean :
 	rm -rf \
-		$(OBJ_DIR)/main/* \
+		$(OBJ_DIR)/release/* \
 		$(OBJ_DIR)/test/* \
 		$(OBJ_DIR)/debug/* \
 		$(OBJ_DIR)/dep/main/* \
@@ -90,12 +102,16 @@ init :
 	$(call mkdirp,$(SRC_DIR))
 	$(call mkdirp,$(TEST_DIR))
 	@echo "copy default c++ files"
-	$(call printFile,$(srcExample), $(SRC_DIR)/main.$(EXT))
-	$(call printFile,$(testExample), $(TEST_DIR)/test.$(EXT))
+	$(call printFile,$(srcExample),$(SRC_DIR)/main.$(EXT))
+	$(call printFile,$(testExample),$(TEST_DIR)/test.$(EXT))
 
 ##include dependency
+ifeq (0, $(words $(findstring $(MAKECMDGOALS), $(NODEPS))))
+
 -include $(addprefix $(OBJ_DIR)/dep/main/, $(MAIN_DEP))
 -include $(addprefix $(OBJ_DIR)/dep/test/, $(TEST_DEP))
+
+endif
 
 ##example sources
 define srcExample
