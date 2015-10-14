@@ -8,13 +8,23 @@
 SRC_DIR = src
 TEST_DIR = test
 OBJ_DIR = build
+LIB_DIR = lib
+
+TARGET = main
+CPPFLAGS = -std=c++11
 
 #LIB = -Llib/curl-7.32.0/lib -lcurl
 #INCLUDE = -Ilib/curl-7.32.0/include
 
-TARGET = main
-CPPFLAGS = -std=c++11
-TESTFLAGS = -lgtest -D__TEST__ -g
+TESTFLAGS = -D__TEST__ -g
+TESTLIB = -lgtest
+
+ifeq ($(MAKECMDGOALS), test)
+-include .gtest
+endif
+
+GTEST_VER = 1.7.0
+GTEST_DOWNLOAD_URL=https://googletest.googlecode.com/files/gtest-$(GTEST_VER).zip
 
 EXT = cpp
 
@@ -27,9 +37,9 @@ TEST_OBJECTS = $(TEST_SOURCES:.$(EXT)=.test)
 MAIN_DEP = $(MAIN_SOURCES:.$(EXT)=.d)
 TEST_DEP = $(TEST_SOURCES:.$(EXT)=.d)
 
-.PHONY : all clean run test debug init
+.PHONY : all clean run test debug init clean-all
 
-NODEPS := clean
+NODEPS := clean clean-all
 
 all : $(TARGET)
 $(TARGET) : $(addprefix $(OBJ_DIR)/release/, $(MAIN_OBJECTS))
@@ -37,12 +47,26 @@ $(TARGET) : $(addprefix $(OBJ_DIR)/release/, $(MAIN_OBJECTS))
 		$(addprefix $(OBJ_DIR)/release/, $(MAIN_OBJECTS))
 
 test : $(TARGET).test
-	./$(TARGET).test
+	@./$(TARGET).test
 $(TARGET).test : $(addprefix $(OBJ_DIR)/test/, $(MAIN_OBJECTS)) \
                  $(addprefix $(OBJ_DIR)/test/, $(TEST_OBJECTS))
-	$(CXX) -o $(TARGET).test $(LIB) $(TESTFLAGS) \
+	$(CXX) -o $(TARGET).test $(LIB) \
+		$(TESTLIB) \
 		$(addprefix $(OBJ_DIR)/test/, $(MAIN_OBJECTS)) \
 		$(addprefix $(OBJ_DIR)/test/, $(TEST_OBJECTS))
+.gtest :
+	@read -p "Do you want install gtest library in $(LIB_DIR) for test? (y,n)" confirm ; \
+	if [ $$confirm = "y" ] ; then \
+		echo -e '$(subst $(newline),\n,$(TEST_VAR))' > .gtest; \
+		mkdir -p lib ;\
+		wget -O $(LIB_DIR)/gtest-$(GTEST_VER).zip $(GTEST_DOWNLOAD_URL) ; \
+		unzip $(LIB_DIR)/gtest-$(GTEST_VER).zip -d lib ; \
+		rm $(LIB_DIR)/gtest-$(GTEST_VER).zip ; \
+		cd $(LIB_DIR)/gtest-$(GTEST_VER); ./configure; make ; \
+		echo "gtest-$(GTEST_VER) is installed!" ; \
+	else \
+		echo "" > .gtest ; \
+	fi
 
 debug : $(addprefix $(OBJ_DIR)/debug/, $(MAIN_OBJECTS))
 	$(CXX) -o $(TARGET) $(LIB) -g \
@@ -87,6 +111,10 @@ clean :
 		$(OBJ_DIR)/dep/test/* \
 		$(TARGET) \
 		$(TARGET).test
+clean-all : clean
+	rm -rf \
+		$(LIB_DIR)/gtest-$(GTEST_VER) \
+		.gtest
 
 run : $(TARGET)
 	./$(TARGET)
@@ -101,6 +129,7 @@ init :
 	$(call mkdirp,$(OBJ_DIR)/dep/test)
 	$(call mkdirp,$(SRC_DIR))
 	$(call mkdirp,$(TEST_DIR))
+	$(call mkdirp,$(LIB_DIR))
 	@echo "copy default c++ files"
 	$(call printFile,$(srcExample),$(SRC_DIR)/main.$(EXT))
 	$(call printFile,$(testExample),$(TEST_DIR)/test.$(EXT))
@@ -109,7 +138,10 @@ init :
 ifeq (0, $(words $(findstring $(MAKECMDGOALS), $(NODEPS))))
 
 -include $(addprefix $(OBJ_DIR)/dep/main/, $(MAIN_DEP))
+
+ifeq ($(MAKECMDGOALS), test)
 -include $(addprefix $(OBJ_DIR)/dep/test/, $(TEST_DEP))
+endif
 
 endif
 
@@ -163,4 +195,9 @@ define mkdirp
 	@echo -en "\t"
 	@echo -E "$(strip $(1))"
 	@mkdir -p $(1)
+endef
+
+define TEST_VAR
+TESTFLAGS += -I$(LIB_DIR)/gtest-$(GTEST_VER)/include
+TESTLIB += -L$(LIB_DIR)/gtest-$(GTEST_VER)/lib
 endef
